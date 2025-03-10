@@ -1,7 +1,7 @@
 ``` python
 demo.launch(share=True)
 ```
-![image](https://github.com/user-attachments/assets/fa43cb46-125f-4471-a81a-1a7b46003606)
+![image](https://github.com/NadaYehia/Chatbot_HR_assistant/main/Demo/gradio_app)
 
 
 ```python
