@@ -1,0 +1,222 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "bfb97118-eedd-4077-a972-6ba748e75a40",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "## HR chatbot assistant using Langchain and Python functions"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "662e91b9-1580-4856-ba02-4d1614162905",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# setup Enviornment\n",
+    "__import__('pysqlite3')\n",
+    "import sys\n",
+    "\n",
+    "sys.modules['sqlite3'] = sys.modules['pysqlite3']"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "341066b8-d793-4a08-a218-eeb12f9fe10a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "#Import necessary libraries\n",
+    "import os\n",
+    "import openai\n",
+    "import sys"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "9d3b6c08-ff25-449d-9098-8a92b0a0f62b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "#Using PyPDF\n",
+    "from langchain.document_loaders import PyPDFLoader\n",
+    "\n",
+    "Doc_loader = PyPDFLoader(\"Nestle_HR_policies.pdf\")\n",
+    "extracted_text = Doc_loader.load()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "6b59e24d-3753-41af-b319-100ba31b0ce7",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from langchain.text_splitter import RecursiveCharacterTextSplitter\n",
+    "text_splitter  = RecursiveCharacterTextSplitter(\n",
+    "    chunk_size=150,\n",
+    "    chunk_overlap=0,\n",
+    "    separators=[\"\\n\\n\", \"\\n\", \"(?<=\\. )\", \" \", \"\"]\n",
+    ")\n",
+    "splitted_text=text_splitter.split_documents(extracted_text)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "aa33850c-67b2-4c50-8f09-85d8e79a71a1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Embed the text and save it in vector stores\n",
+    "from langchain.embeddings import OpenAIEmbeddings\n",
+    "embeddings = OpenAIEmbeddings()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "f32eb890-c600-4070-b30d-b84c92e10998",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from langchain.vectorstores import Chroma\n",
+    "persist_directory = \"chroma_vector_nestle\"\n",
+    "\n",
+    "vectordb = Chroma.from_documents(\n",
+    "    documents=splitted_text,\n",
+    "    embedding=embeddings,\n",
+    "    persist_directory=persist_directory\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "b8691213-134d-4374-b3f9-16026574dd17",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "#creat retrieval function\n",
+    "from langchain.chat_models import ChatOpenAI\n",
+    "llm = ChatOpenAI(model_name=\"gpt-3.5-turbo\", temperature=0)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "d46dbcf9-f7d8-4e52-81b6-3de379823243",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from langchain.chains import RetrievalQA\n",
+    "Retriever_chain = RetrievalQA.from_chain_type(llm,\n",
+    "                                       retriever=vectordb.as_retriever(),\n",
+    "                                       return_source_documents=True,\n",
+    "                                       )"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "id": "ae4cdd93-7251-460b-a8d8-a1c0be3564d7",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "* Running on local URL:  http://127.0.0.1:7860\n",
+      "* Running on public URL: https://fae4b3221cea1f4443.gradio.live\n",
+      "\n",
+      "This share link expires in 72 hours. For free permanent hosting and GPU upgrades, run `gradio deploy` from the terminal in the working directory to deploy to Hugging Face Spaces (https://huggingface.co/spaces)\n"
+     ]
+    },
+    {
+     "data": {
+      "text/html": [
+       "<div><iframe src=\"https://fae4b3221cea1f4443.gradio.live\" width=\"100%\" height=\"500\" allow=\"autoplay; camera; microphone; clipboard-read; clipboard-write;\" frameborder=\"0\" allowfullscreen></iframe></div>"
+      ],
+      "text/plain": [
+       "<IPython.core.display.HTML object>"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    },
+    {
+     "data": {
+      "text/plain": []
+     },
+     "execution_count": 10,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "import gradio as gr\n",
+    "\n",
+    "import time\n",
+    "with gr.Blocks() as demo:\n",
+    "    \n",
+    "    def close():\n",
+    "            demo.clear()\n",
+    "            demo.close()\n",
+    "\n",
+    "    def Enter_query (query,history):\n",
+    "\n",
+    "        if query.strip() == \"\":\n",
+    "            return 'Please enter your question'\n",
+    "            # Get the answer from the chain\n",
+    "        start = time.time()\n",
+    "\n",
+    "        res=Retriever_chain(query)\n",
+    "        end = time.time()\n",
+    "\n",
+    "        return \"\\n\\n> Question:\" + query + f\"\\n> Answer (took {round(end - start, 2)} s.):\"+res['result']\n",
+    "    chatbot=gr.ChatInterface(fn=Enter_query,type=\"messages\")\n",
+    "    btn=gr.Button('Exit')     \n",
+    "    btn.click(fn=close, inputs=None, outputs=None)\n",
+    "    \n",
+    "\n",
+    "demo.launch(share=True)\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "996e6e47-b180-4b09-811b-9876de42769a",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 [3.10]",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.2"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
